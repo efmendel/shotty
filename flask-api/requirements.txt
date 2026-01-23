@@ -1,0 +1,9 @@
+# Flask Web Framework
+flask==3.0.0
+flask-cors==4.0.0
+gunicorn==21.2.0
+werkzeug==3.0.1
+
+# Environment & Utilities
+python-dotenv==1.0.1
+requests==2.32.5

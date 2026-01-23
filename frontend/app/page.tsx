@@ -23,7 +23,14 @@ export default function Home() {
       if (uploadError) {
         setMessage(`Error: ${uploadError.message}`)
       } else {
-        setMessage(`Success! Uploaded: ${uploadData.path}`)
+        // Notify Flask API about the upload
+        const flaskResponse = await fetch('http://localhost:5001/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_path: uploadData.path })
+        })
+        const flaskData = await flaskResponse.json()
+        setMessage(`Supabase: ${uploadData.path} | Flask: ${flaskData.message}`)
       }
     } catch (error) {
       setMessage(`Error: ${error}`)
