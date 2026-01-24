@@ -22,17 +22,30 @@ def health():
 
 @app.route("/notify", methods=["POST"])
 def notify():
+    from services.storage import get_signed_url
+
     data = request.get_json()
     video_path = data.get("video_path") if data else None
 
     if not video_path:
         return jsonify({"error": "video_path is required"}), 400
 
-    return jsonify({
-        "status": "received",
-        "message": f"Flask received notification for: {video_path}",
-        "video_path": video_path
-    })
+    # Test Supabase connection by generating a signed URL
+    try:
+        signed_url = get_signed_url(video_path)
+        return jsonify({
+            "status": "received",
+            "message": f"Flask received and verified: {video_path}",
+            "video_path": video_path,
+            "signed_url": signed_url
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "received",
+            "message": f"Flask received: {video_path} (Supabase error: {str(e)})",
+            "video_path": video_path,
+            "error": str(e)
+        })
 
 
 if __name__ == "__main__":
