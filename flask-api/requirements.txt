@@ -10,3 +10,9 @@ requests==2.32.5
 
 # Supabase
 supabase>=2.0.0
+
+# Video Processing
+numpy==2.2.6
+
+# Testing
+pytest>=8.0.0
