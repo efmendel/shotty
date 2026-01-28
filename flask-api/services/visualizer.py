@@ -9,13 +9,64 @@ import logging
 from typing import Any, Dict, Optional, Tuple
 
 import cv2
-import mediapipe as mp
 
 from services.models import SwingAnalysisResults
 from services.swing_analyzer import SwingAnalyzer
 from services.video_processor import PRESET_DIFFICULT_VIDEO, VideoProcessor
 
 logger = logging.getLogger(__name__)
+
+# Upper body pose connections for drawing skeleton
+# Each tuple is (start_landmark, end_landmark)
+POSE_CONNECTIONS = [
+    ("left_shoulder", "right_shoulder"),
+    ("left_shoulder", "left_elbow"),
+    ("left_elbow", "left_wrist"),
+    ("right_shoulder", "right_elbow"),
+    ("right_elbow", "right_wrist"),
+    ("left_shoulder", "left_hip"),
+    ("right_shoulder", "right_hip"),
+    ("left_hip", "right_hip"),
+]
+
+
+def _draw_skeleton(frame, landmarks, width, height):
+    """
+    Draw pose skeleton on frame using extracted landmarks.
+
+    Args:
+        frame: OpenCV image (BGR).
+        landmarks: Dictionary of landmark coordinates from VideoProcessor.
+        width: Frame width in pixels.
+        height: Frame height in pixels.
+    """
+    if not landmarks:
+        return
+
+    # Draw connections (lines between joints)
+    for start_name, end_name in POSE_CONNECTIONS:
+        if start_name in landmarks and end_name in landmarks:
+            start = landmarks[start_name]
+            end = landmarks[end_name]
+
+            # Convert normalized coords to pixel coords
+            start_pt = (int(start["x"] * width), int(start["y"] * height))
+            end_pt = (int(end["x"] * width), int(end["y"] * height))
+
+            # Draw line (blue)
+            cv2.line(frame, start_pt, end_pt, (255, 0, 0), 2)
+
+    # Draw landmarks (joints as circles)
+    for name, lm in landmarks.items():
+        pt = (int(lm["x"] * width), int(lm["y"] * height))
+        # Green for high visibility, yellow for medium, red for low
+        if lm["visibility"] > 0.7:
+            color = (0, 255, 0)
+        elif lm["visibility"] > 0.5:
+            color = (0, 255, 255)
+        else:
+            color = (0, 0, 255)
+        cv2.circle(frame, pt, 5, color, -1)
 
 
 def visualize_swing_phases(
@@ -80,11 +131,12 @@ def visualize_swing_phases(
     fourcc = cv2.VideoWriter_fourcc(*"avc1")
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-    mp_pose = mp.solutions.pose
-    mp_drawing = mp.solutions.drawing_utils
-    pose = mp_pose.Pose()
-
     frame_phases = assign_phases_to_frames(phases, video_data["frame_count"])
+
+    # Build lookup for frame landmarks from video_data
+    frame_landmarks = {}
+    for frame_data in video_data["frames"]:
+        frame_landmarks[frame_data["frame_number"]] = frame_data.get("landmarks")
 
     frame_number = 0
 
@@ -95,17 +147,10 @@ def visualize_swing_phases(
 
         frame_number += 1
 
-        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = pose.process(image_rgb)
-
-        if results.pose_landmarks:
-            mp_drawing.draw_landmarks(
-                frame,
-                results.pose_landmarks,
-                mp_pose.POSE_CONNECTIONS,
-                mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=3),
-                mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2),
-            )
+        # Draw skeleton using pre-extracted landmarks
+        landmarks = frame_landmarks.get(frame_number)
+        if landmarks:
+            _draw_skeleton(frame, landmarks, width, height)
 
         phase_info = frame_phases.get(frame_number, ("Analyzing...", 0.0, "Unknown"))
         current_phase, phase_confidence, phase_reason = phase_info
@@ -197,7 +242,6 @@ def visualize_swing_phases(
 
     cap.release()
     out.release()
-    pose.close()
 
     logger.info("Annotated video saved to: %s", output_path)
     return output_path

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 
 export default function Home() {
   const [uploading, setUploading] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const [message, setMessage] = useState('')
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -23,19 +24,29 @@ export default function Home() {
       if (uploadError) {
         setMessage(`Error: ${uploadError.message}`)
       } else {
-        // Notify Flask API about the upload
-        const flaskResponse = await fetch('http://localhost:5001/notify', {
+        // Call Flask API to process the video
+        setUploading(false)
+        setProcessing(true)
+        const flaskResponse = await fetch('http://localhost:5001/api/process', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-secret': 'dev-secret-key'
+          },
           body: JSON.stringify({ video_path: uploadData.path })
         })
         const flaskData = await flaskResponse.json()
-        setMessage(`Supabase: ${uploadData.path} | Flask: ${flaskData.message}`)
+        if (flaskData.status === 'completed') {
+          setMessage(`Analysis complete! Annotated video: ${flaskData.annotated_url}`)
+        } else {
+          setMessage(`Processing failed: ${flaskData.error}`)
+        }
       }
     } catch (error) {
       setMessage(`Error: ${error}`)
     } finally {
       setUploading(false)
+      setProcessing(false)
     }
   }
 
@@ -47,10 +58,11 @@ export default function Home() {
           type="file"
           accept="video/*"
           onChange={handleUpload}
-          disabled={uploading}
+          disabled={uploading || processing}
           className="w-full"
         />
         {uploading && <p>Uploading...</p>}
+        {processing && <p>Processing video (this may take a moment)...</p>}
         {message && <p className="text-sm">{message}</p>}
       </div>
     </div>

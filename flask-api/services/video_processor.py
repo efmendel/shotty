@@ -6,11 +6,37 @@ body landmark coordinates for swing analysis.
 """
 
 import logging
+import os
+import urllib.request
 
 import cv2
 import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 logger = logging.getLogger(__name__)
+
+# Model download URL and local path
+MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task"
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+MODEL_PATH = os.path.join(MODEL_DIR, "pose_landmarker_heavy.task")
+
+
+def ensure_model_downloaded():
+    """
+    Download the pose landmarker model if not present.
+
+    Returns:
+        Path to the downloaded model file.
+    """
+    if os.path.exists(MODEL_PATH):
+        return MODEL_PATH
+
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    logger.info("Downloading pose landmarker model...")
+    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+    logger.info("Model downloaded to: %s", MODEL_PATH)
+    return MODEL_PATH
 
 
 class PoseConfig:
@@ -121,8 +147,7 @@ class VideoProcessor:
 
     Attributes:
         pose_config: PoseConfig instance controlling detection parameters.
-        mp_pose: MediaPipe pose solution reference.
-        pose: Initialized MediaPipe Pose instance.
+        detector: MediaPipe PoseLandmarker instance.
     """
 
     # MediaPipe landmark indices for tennis swing analysis
@@ -144,13 +169,23 @@ class VideoProcessor:
         Args:
             pose_config: PoseConfig instance. If None, uses default balanced config.
         """
-        self.mp_pose = mp.solutions.pose
-
         if pose_config is None:
             pose_config = PoseConfig()
 
         self.pose_config = pose_config
-        self.pose = self.mp_pose.Pose(**pose_config.to_dict())
+
+        # Ensure model is downloaded
+        model_path = ensure_model_downloaded()
+
+        # Create PoseLandmarker with new Tasks API
+        base_options = python.BaseOptions(model_asset_path=model_path)
+        options = vision.PoseLandmarkerOptions(
+            base_options=base_options,
+            running_mode=vision.RunningMode.VIDEO,
+            min_pose_detection_confidence=pose_config.min_detection_confidence,
+            min_tracking_confidence=pose_config.min_tracking_confidence,
+        )
+        self.detector = vision.PoseLandmarker.create_from_options(options)
 
     def process_video(self, video_path):
         """
@@ -188,21 +223,27 @@ class VideoProcessor:
                 break
 
             frame_number += 1
-            timestamp = frame_number / fps
+            timestamp_ms = int((frame_number / fps) * 1000)
 
+            # Convert BGR to RGB
             image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = self.pose.process(image_rgb)
+
+            # Create MediaPipe Image
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
+
+            # Detect pose landmarks
+            results = self.detector.detect_for_video(mp_image, timestamp_ms)
 
             frame_data = {
                 "frame_number": frame_number,
-                "timestamp": timestamp,
+                "timestamp": frame_number / fps,
                 "landmarks": None,
                 "pose_detected": False,
             }
 
-            if results.pose_landmarks:
+            if results.pose_landmarks and len(results.pose_landmarks) > 0:
                 frame_data["pose_detected"] = True
-                frame_data["landmarks"] = self._extract_landmarks(results.pose_landmarks)
+                frame_data["landmarks"] = self._extract_landmarks(results.pose_landmarks[0])
 
             frames_data.append(frame_data)
 
@@ -210,7 +251,6 @@ class VideoProcessor:
                 logger.info("Processed %d/%d frames...", frame_number, frame_count)
 
         cap.release()
-        self.pose.close()
 
         logger.info("Processing complete! %d frames processed.", frame_number)
 
@@ -296,7 +336,7 @@ class VideoProcessor:
         Extract key landmarks for swing analysis from MediaPipe results.
 
         Args:
-            pose_landmarks: MediaPipe pose landmarks object.
+            pose_landmarks: List of NormalizedLandmark objects from MediaPipe.
 
         Returns:
             Dictionary mapping landmark names to x, y, z, visibility dicts.
@@ -304,7 +344,7 @@ class VideoProcessor:
         landmarks = {}
 
         for name, idx in self.LANDMARK_INDICES.items():
-            landmark = pose_landmarks.landmark[idx]
+            landmark = pose_landmarks[idx]
             landmarks[name] = {
                 "x": landmark.x,
                 "y": landmark.y,

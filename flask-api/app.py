@@ -1,51 +1,27 @@
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask
 from flask_cors import CORS
 
 load_dotenv(".env.local")
 
-app = Flask(__name__)
-CORS(app)
+
+def create_app():
+    """Create and configure the Flask application."""
+    app = Flask(__name__)
+    CORS(app)
+
+    from api.health import health_bp
+    from api.process import process_bp
+
+    app.register_blueprint(health_bp)
+    app.register_blueprint(process_bp)
+
+    return app
 
 
-@app.route("/", methods=["GET"])
-def root():
-    return jsonify({"message": "Shotty Flask API", "status": "running"})
-
-
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "healthy"})
-
-
-@app.route("/notify", methods=["POST"])
-def notify():
-    from services.storage import get_signed_url
-
-    data = request.get_json()
-    video_path = data.get("video_path") if data else None
-
-    if not video_path:
-        return jsonify({"error": "video_path is required"}), 400
-
-    # Test Supabase connection by generating a signed URL
-    try:
-        signed_url = get_signed_url(video_path)
-        return jsonify({
-            "status": "received",
-            "message": f"Flask received and verified: {video_path}",
-            "video_path": video_path,
-            "signed_url": signed_url
-        })
-    except Exception as e:
-        return jsonify({
-            "status": "received",
-            "message": f"Flask received: {video_path} (Supabase error: {str(e)})",
-            "video_path": video_path,
-            "error": str(e)
-        })
+app = create_app()
 
 
 if __name__ == "__main__":
