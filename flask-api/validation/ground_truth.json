@@ -1,0 +1,13 @@
+{
+  "_README": "Map each video filename to its expected phase frames. tolerance = allowed frame delta (default 5).",
+  "test_swing.mp4": {
+    "description": "Right-handed forehand from baseline, side view",
+    "phases": {
+      "backswing": { "frame": 149 },
+      "forward_swing": { "frame": 205 },
+      "contact": { "frame": 236 },
+      "follow_through": { "frame": 240 }
+    },
+    "tolerance": 5
+  }
+}

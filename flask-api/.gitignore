@@ -48,3 +48,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Validation test videos (large files)
+validation/videos/
