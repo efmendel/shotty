@@ -22,31 +22,33 @@ shotty/
 ## Prerequisites
 
 - Python 3.12+
-- Node.js 18+
-- [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started)
+- Node.js 18+ with npm (Supabase CLI runs via `npx`, installed as a dev dependency)
 - Docker (required by Supabase CLI for local dev)
 
 ---
 
 ## 1. Supabase (local)
 
-The Supabase config lives in `frontend/supabase/`.
+The Supabase config lives in `frontend/supabase/`. Since `supabase` is a dev dependency, run `npm install` first so `npx` can find it.
 
 ```bash
 cd frontend
-supabase start
+npm install
+npx supabase start
 ```
 
-This starts:
-- API: http://127.0.0.1:54321
-- Studio: http://127.0.0.1:54323
-- DB: port 54322
+When it finishes, find the **Authentication Keys** section in the output and copy both values:
 
-On first run, `supabase start` prints your local `anon key` and `service_role key`. The `seed.sql` will automatically create the `videos` storage bucket.
+```
+│ Publishable │ sb_publishable_...   ← this is your anon key
+│ Secret      │ sb_secret_...        ← this is your service role key
+```
+
+The `seed.sql` will automatically create the `videos` storage bucket.
 
 To stop:
 ```bash
-supabase stop
+npx supabase stop
 ```
 
 ---
@@ -60,14 +62,15 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create `flask-api/.env.local`:
+Create `flask-api/.env.local`. Paste the **Secret** (`sb_secret_...`) from the `npx supabase start` output above. `FLASK_SECRET_KEY` is a value you choose — it just needs to match whatever you send in the `x-secret` header when calling the API.
+
 ```env
 PORT=5001
 FLASK_DEBUG=true
-FLASK_SECRET_KEY=dev-secret-key
+FLASK_SECRET_KEY=any-string-you-choose
 
 SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_SERVICE_ROLE_KEY=<service_role key from supabase start output>
+SUPABASE_SERVICE_ROLE_KEY=<paste service_role key here>
 SUPABASE_STORAGE_BUCKET=videos
 ```
 
@@ -83,15 +86,12 @@ python app.py
 
 ## 3. Frontend
 
-```bash
-cd frontend
-npm install
-```
+Create `frontend/.env.local` using the keys from the `npx supabase start` output:
 
-Create `frontend/.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key from supabase start output>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<paste Publishable key here>
+SUPABASE_SERVICE_ROLE_KEY=<paste Secret key here>
 ```
 
 Run:
@@ -107,8 +107,8 @@ npm run dev
 Open three terminals:
 
 ```bash
-# Terminal 1 — Supabase
-cd frontend && supabase start
+# Terminal 1 — Supabase (npm install first so npx can find the supabase CLI)
+cd frontend && npm install && npx supabase start
 
 # Terminal 2 — Flask API
 cd flask-api && source venv/bin/activate && python app.py
